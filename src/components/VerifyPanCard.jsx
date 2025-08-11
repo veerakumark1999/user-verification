@@ -1,7 +1,9 @@
 import React, { useState } from "react";
-import Tesseract from "tesseract.js";
+import axios from "axios";
 import "./VerifyPanCard.css";
 import Fuse from "fuse.js"; // For fuzzy matching
+
+const OCR_API_KEY = "K83929765888957"; // Replace with your API key
 
 const VerifyPanCard = () => {
   const [name, setName] = useState("");
@@ -39,6 +41,14 @@ const VerifyPanCard = () => {
     return fuse.search(target).length > 0;
   };
 
+  const toBase64 = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result.split(",")[1]);
+      reader.onerror = (error) => reject(error);
+    });
+
   const handleVerify = async () => {
     if (!image) {
       alert("Please upload a card image.");
@@ -47,11 +57,22 @@ const VerifyPanCard = () => {
     setStatus("loading");
 
     try {
-      const result = await Tesseract.recognize(image, "eng", {
-        logger: (m) => console.log(m),
-      });
+      const base64Image = await toBase64(image);
 
-      const rawText = result.data.text;
+      const formData = new FormData();
+      formData.append("apikey", OCR_API_KEY);
+      formData.append("base64Image", `data:image/png;base64,${base64Image}`);
+      formData.append("language", "eng");
+      formData.append("scale", true);
+      formData.append("OCREngine", 2);
+
+      const res = await axios.post("https://api.ocr.space/parse/image", formData);
+
+      if (res.data.IsErroredOnProcessing) {
+        throw new Error(res.data.ErrorMessage[0]);
+      }
+
+      const rawText = res.data.ParsedResults[0].ParsedText;
       setOcrText(rawText);
 
       const lines = rawText.split("\n").map((line) => normalize(line));
@@ -61,7 +82,7 @@ const VerifyPanCard = () => {
       const mismatched = [];
       const extracted = {};
 
-      // Fuzzy Name check
+      // Name check
       const expectedName = normalize(name);
       const nameFound = fuzzyIncludes(lines, expectedName);
       if (!nameFound) mismatched.push("Name");
@@ -76,6 +97,7 @@ const VerifyPanCard = () => {
       extracted.dob = dobFound ? formattedDob : "Not Found";
 
       // ID number check
+           // ID number check
       if (idType === "pan") {
         const expectedPan = normalize(idNumber);
         const panFound =
@@ -93,26 +115,25 @@ const VerifyPanCard = () => {
         extracted.aadhaar = aadhaarFound ? idNumber : "Not Found";
       }
 
-      // If all match, try to extract all extra details
+      // ✅ Add this new part here
       if (!mismatched.length) {
         if (idType === "pan") {
           extracted.father_name =
-            rawText.match(/(?:Father|Fathers Name|S\/O)\s*:?(.+)/i)?.[1]?.trim() ||
-            "N/A";
-          extracted.issue_date = allDates[1] || "N/A";
+            rawText.match(/(?:Father'?s Name|Fathers Name|S\/O)\s*:?(.+)/i)?.[1]?.trim() ||
+            "Not Found";
+          extracted.mobile = "N/A";
         } else {
-          extracted.gender =
-            rawText.match(/Male|Female|Other/i)?.[0] || "N/A";
-          extracted.address =
-            rawText
-              .split("\n")
-              .slice(5)
-              .join(" ")
-              .match(/.{10,}/)?.[0] || "N/A";
+          extracted.father_name = "N/A";
           extracted.mobile =
-            rawText.match(/\b[6-9]\d{9}\b/)?.[0] || "N/A";
+            rawText.match(/\b[6-9]\d{9}\b/)?.[0] || "Not Found";
         }
       }
+      // ✅ End new part
+
+      setExtractedData(extracted);
+      setMismatches(mismatched);
+      setStatus(mismatched.length ? "error" : "success");
+
 
       setExtractedData(extracted);
       setMismatches(mismatched);
@@ -128,7 +149,6 @@ const VerifyPanCard = () => {
       <div className="card">
         <h2 className="title">🧾 Document Verification</h2>
 
-        {/* Name */}
         <div className="form-row">
           <label>Name:</label>
           <input
@@ -139,7 +159,6 @@ const VerifyPanCard = () => {
           />
         </div>
 
-        {/* DOB */}
         <div className="form-row">
           <label>Date of Birth:</label>
           <input
@@ -149,10 +168,10 @@ const VerifyPanCard = () => {
           />
         </div>
 
-        {/* ID type & number */}
         <div className="form-row">
           <label>ID Type:</label>
           <select
+          id="id-input"
             value={idType}
             onChange={(e) => {
               setIdType(e.target.value);
@@ -170,7 +189,6 @@ const VerifyPanCard = () => {
           />
         </div>
 
-        {/* Upload */}
         <div className="upload-section">
           <label>Upload Card Image:</label>
           <input
@@ -184,7 +202,6 @@ const VerifyPanCard = () => {
           🔍 Verify
         </button>
 
-        {/* Status */}
         {status === "loading" && (
           <p className="status loading">🔄 Extracting text, please wait...</p>
         )}
@@ -220,16 +237,7 @@ const VerifyPanCard = () => {
           </div>
         )}
 
-        {ocrText && (
-          <details>
-            <summary className="text-blue-600 cursor-pointer">
-              Show Extracted OCR Text
-            </summary>
-            <pre className="bg-gray-100 p-2 text-sm whitespace-pre-wrap">
-              {ocrText}
-            </pre>
-          </details>
-        )}
+       
       </div>
     </div>
   );

@@ -1,128 +1,202 @@
-.container {
-  min-height: 100vh;
-  background-color: #f3f4f6;
-  padding: 20px;
+/* ====== Global Styles ====== */
+body {
+  font-family: "Poppins", sans-serif;
+  background: linear-gradient(135deg, #4facfe, #00f2fe);
+  margin: 0;
+  padding: 0;
   display: flex;
   justify-content: center;
   align-items: flex-start;
+  min-height: 100vh;
 }
 
-.card {
-  background: white;
-  padding: 25px;
-  max-width: 720px;
+/* ====== Container ====== */
+.container {
+  max-width: 500px;
   width: 100%;
-  border-radius: 10px;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  padding: 20px;
 }
 
+/* ====== Card Styling ====== */
+.card {
+  background: #fff;
+  border-radius: 15px;
+  padding: 25px 30px;
+  box-shadow: 0px 10px 30px rgba(0, 0, 0, 0.15);
+  animation: fadeInUp 0.5s ease-in-out;
+}
+
+/* ====== Title ====== */
 .title {
   text-align: center;
-  color: #4f46e5;
-  margin-bottom: 20px;
-  font-size: 24px;
-}
-
-.form-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 15px;
-}
-
-.form-row select,
-.form-row input {
-  flex: 1 1 200px;
-  padding: 8px;
-  border: 1px solid #ccc;
-  border-radius: 5px;
-}
-
-.btn {
-  padding: 10px 15px;
-  border: none;
-  color: white;
-  border-radius: 5px;
-  cursor: pointer;
+  color: #2c3e50;
   font-weight: bold;
+  font-size: 1.8rem;
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
 }
 
-.add-btn {
-  background-color: #6366f1;
-}
-
-.add-btn:hover {
-  background-color: #4f46e5;
-}
-
-.verify-btn {
-  width: 100%;
-  background-color: #10b981;
-}
-
-.verify-btn:hover {
-  background-color: #059669;
-}
-
-.upload-section {
+/* ====== Form Fields ====== */
+.form-row {
   margin-bottom: 15px;
+}
+
+.form-row label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  color: #34495e;
+}
+
+.form-row input,
+.form-row select {
+  margin: 10px 0;
+  width: 90%;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #bdc3c7;
+  font-size: 1rem;
+  outline: none;
+  transition: all 0.3s ease;
+}
+#id-input{
+  width: 96%;
+}
+.form-row input:focus,
+.form-row select:focus {
+  border-color: #3498db;
+  box-shadow: 0px 0px 8px rgba(52, 152, 219, 0.3);
+}
+
+/* ====== Upload Section ====== */
+.upload-section label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
 }
 
 .upload-section input {
+  margin: 10px 0    ;
+  width: 90%;
+  padding: 10px;
+  border: 2px dashed #bdc3c7;
+  border-radius: 8px;
+  background: #f4f6f8;
+  cursor: pointer;
+  transition: border 0.3s ease;
+}
+
+.upload-section input:hover {
+  border-color: #3498db;
+}
+
+/* ====== Button ====== */
+.btn {
   width: 100%;
-  padding: 8px;
-  margin-top: 5px;
-  border: 1px solid #ccc;
-  border-radius: 5px;
+  padding: 12px;
+  font-size: 1rem;
+  font-weight: bold;
+  color: white;
+  background: linear-gradient(90deg, #3498db, #2980b9);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.3s ease, background 0.3s ease;
 }
 
-.entered-fields ul {
-  margin-top: 5px;
-  padding-left: 20px;
+.btn:hover {
+  background: linear-gradient(90deg, #2980b9, #1c5980);
+  transform: translateY(-2px);
 }
 
+/* ====== Status Messages ====== */
 .status {
-  margin-top: 20px;
-  padding: 15px;
-  border-radius: 5px;
+  padding: 14px;
+  margin-top: 18px;
+  border-radius: 8px;
+  animation: fadeIn 0.4s ease-in-out;
+  font-weight: 500;
+}
+
+.status.success {
+  background: #2ecc71;
+  color: white;
+}
+
+.status.error {
+  background: #e74c3c;
+  color: white;
 }
 
 .status.loading {
-  color: #2563eb;
-  background-color: #e0e7ff;
+  background: #f39c12;
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-.status.success {
-  color: #047857;
-  background-color: #d1fae5;
+/* ====== Loading Spinner ====== */
+.loader {
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top: 3px solid white;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  animation: spin 1s linear infinite;
 }
 
-.status.error {
-  color: #b91c1c;
-  background-color: #fee2e2;
+/* ====== Verified Info Card ====== */
+.verified-info {
+  margin-top: 12px;
+  padding: 15px;
+  background: #f4f6f8;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  animation: fadeIn 0.4s ease-in-out;
 }
 
-.status pre {
-  background: #fff;
-  padding: 10px;
-  margin-top: 10px;
-  border-radius: 5px;
-  overflow-x: auto;
-}
 .verified-info p {
   margin: 6px 0;
-  font-size: 15px;
+  font-weight: 500;
+  color: #2c3e50;
 }
-.status.success, .status.error {
-  margin-top: 15px;
-  padding: 10px;
-  border-radius: 8px;
+
+/* ====== Keyframes ====== */
+@keyframes fadeInUp {
+  from {
+    transform: translateY(15px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
-.status.success {
-  background-color: #e6ffe6;
-  color: #2b662b;
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
-.status.error {
-  background-color: #ffe6e6;
-  color: #8b0000;
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 500px) {
+  .card {
+    padding: 20px;
+  }
+  .title {
+    font-size: 1.5rem;
+  }
 }
