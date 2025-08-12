@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import axios from "axios";
 import "./VerifyPanCard.css";
 import Lottie from "lottie-react";
-import Success from "../animations/success.json";
+
 import Loading from "../animations/Loading animation blue.json";
 const OCR_API_KEY = "K83929765888957"; // Replace with your API key
 
@@ -239,7 +239,7 @@ const VerifyPanCard = () => {
       {status === "success" && extractedData && (
   <div className="status success" role="alert" aria-live="polite" >
 
-    <strong>    <Lottie animationData={Success} style={{height: 40, width: 80,position:"absolute",right:720,bottom:40}} loop={false} />All fields matched!</strong>
+    <strong> ☑️ All fields matched!</strong>
     <div className="verified-info">
       {Object.entries(extractedData).map(([key, val]) => (
         <p key={key}>
