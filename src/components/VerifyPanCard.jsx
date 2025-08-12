@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import axios from "axios";
 import "./VerifyPanCard.css";
-import Fuse from "fuse.js"; // For fuzzy matching
-
+import Lottie from "lottie-react";
+import Success from "../animations/success.json";
+import Loading from "../animations/Loading animation blue.json";
 const OCR_API_KEY = "K83929765888957"; // Replace with your API key
 
 const VerifyPanCard = () => {
@@ -11,36 +12,33 @@ const VerifyPanCard = () => {
   const [idType, setIdType] = useState("pan");
   const [idNumber, setIdNumber] = useState("");
   const [image, setImage] = useState(null);
-  const [status, setStatus] = useState("idle");
+  const [status, setStatus] = useState("idle"); // idle, loading, success, error
   const [mismatches, setMismatches] = useState([]);
   const [extractedData, setExtractedData] = useState(null);
-  const [ocrText, setOcrText] = useState("");
 
-  const PAN_REGEX = /[A-Z]{5}[0-9]{4}[A-Z]/;
-  const AADHAAR_REGEX = /\b\d{4}\s?\d{4}\s?\d{4}\b/;
+  const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 
+  // Normalize text by removing non-alphanumeric and lowercasing
   const normalize = (text) =>
     text.toLowerCase().replace(/[^a-z0-9]/gi, "").trim();
 
+  // Format ISO date string yyyy-mm-dd → dd/mm/yyyy
   const formatDateToDDMMYYYY = (isoDate) => {
     if (!isoDate) return "";
-    const date = new Date(isoDate);
-    const day = String(date.getDate()).padStart(2, "0");
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const year = date.getFullYear();
+    const d = new Date(isoDate);
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
     return `${day}/${month}/${year}`;
   };
 
+  // Extract dates dd/mm/yyyy from OCR text with flexible separators
   const extractAllDatesFromText = (text) => {
     const matches = text.match(/\b\d{2}[\s\/\-]\d{2}[\s\/\-]\d{4}\b/g);
     return matches ? matches.map((d) => d.replace(/[\s\-]/g, "/")) : [];
   };
 
-  const fuzzyIncludes = (lines, target) => {
-    const fuse = new Fuse(lines, { includeScore: true, threshold: 0.3 });
-    return fuse.search(target).length > 0;
-  };
-
+  // Convert file to base64 string for OCR API input
   const toBase64 = (file) =>
     new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -49,12 +47,32 @@ const VerifyPanCard = () => {
       reader.onerror = (error) => reject(error);
     });
 
+  // Extract Aadhaar numbers only from lines matching exact pattern
+  const extractAadhaarOnlyFromLines = (rawText) => {
+    const lines = rawText.split("\n");
+
+    // Filter lines that conform exactly to Aadhaar number format:
+    // Either 12 digits continuously or 3 groups of 4 digits separated by spaces
+    const aadhaarCandidates = lines
+      .map((line) => line.trim())
+      .filter(
+        (line) =>
+          /^(\d{12}|\d{4}\s\d{4}\s\d{4})$/.test(line)
+      )
+      .map((aadhaar) => aadhaar.replace(/\s/g, "")); // Remove spaces to get pure digits
+
+    return aadhaarCandidates;
+  };
+
   const handleVerify = async () => {
     if (!image) {
       alert("Please upload a card image.");
       return;
     }
+
     setStatus("loading");
+    setExtractedData(null);
+    setMismatches([]);
 
     try {
       const base64Image = await toBase64(image);
@@ -73,8 +91,6 @@ const VerifyPanCard = () => {
       }
 
       const rawText = res.data.ParsedResults[0].ParsedText;
-      setOcrText(rawText);
-
       const lines = rawText.split("\n").map((line) => normalize(line));
       const text = normalize(rawText);
       const allDates = extractAllDatesFromText(rawText);
@@ -82,41 +98,53 @@ const VerifyPanCard = () => {
       const mismatched = [];
       const extracted = {};
 
-      // Name check
+      // Strict exact normalized name matching
       const expectedName = normalize(name);
-      const nameFound = fuzzyIncludes(lines, expectedName);
+      const nameFound = lines.includes(expectedName);
       if (!nameFound) mismatched.push("Name");
       extracted.name = nameFound ? name : "Not Found";
 
-      // DOB check
+      // DOB exact normalized matching
       const formattedDob = formatDateToDDMMYYYY(dob);
-      const dobFound = allDates.some(
-        (d) => normalize(d) === normalize(formattedDob)
-      );
+      const dobFound = allDates.some((d) => normalize(d) === normalize(formattedDob));
       if (!dobFound) mismatched.push("DOB");
       extracted.dob = dobFound ? formattedDob : "Not Found";
 
-      // ID number check
-           // ID number check
+      // PAN or Aadhaar verification
       if (idType === "pan") {
         const expectedPan = normalize(idNumber);
+        const panValid = PAN_REGEX.test(idNumber.toUpperCase());
         const panFound =
-          PAN_REGEX.test(idNumber) &&
-          (text.includes(expectedPan) || fuzzyIncludes(lines, expectedPan));
+          panValid &&
+          (text.includes(expectedPan) || lines.some((line) => line.includes(expectedPan)));
         if (!panFound) mismatched.push("PAN");
         extracted.pan = panFound ? idNumber.toUpperCase() : "Not Found";
       } else {
-        const aadhaarClean = idNumber.replace(/\s+/g, "");
-        const aadhaarFound =
-          AADHAAR_REGEX.test(idNumber) &&
-          (text.replace(/\s+/g, "").includes(aadhaarClean) ||
-            fuzzyIncludes(lines, aadhaarClean));
+        // Aadhaar: extract only lines that match Aadhaar pattern exactly
+        const aadhaarCandidates = extractAadhaarOnlyFromLines(rawText);
+
+        const cleanInput = idNumber.replace(/\D/g, "");
+
+        // Debug logs - remove or comment out in production
+        console.log("Extracted Aadhaar candidates:", aadhaarCandidates);
+        console.log("User input last 4 digits:", cleanInput);
+       
+        let aadhaarFound = false;
+        if (cleanInput.length === 4) {
+          aadhaarFound = aadhaarCandidates.some((a) => a.slice(-4) === cleanInput);
+        } else {
+          aadhaarFound = false;
+        }
+
         if (!aadhaarFound) mismatched.push("Aadhaar");
-        extracted.aadhaar = aadhaarFound ? idNumber : "Not Found";
+        let result=aadhaarCandidates.length > 0 ? aadhaarCandidates.join(", ").slice(0,12) : "Not Found";
+        extracted.aadhaar = aadhaarFound
+          ? ` ${result}`
+          : "Not Found";
       }
 
-      // ✅ Add this new part here
-      if (!mismatched.length) {
+      // Extract extra info on full match
+      if (mismatched.length === 0) {
         if (idType === "pan") {
           extracted.father_name =
             rawText.match(/(?:Father'?s Name|Fathers Name|S\/O)\s*:?(.+)/i)?.[1]?.trim() ||
@@ -124,22 +152,15 @@ const VerifyPanCard = () => {
           extracted.mobile = "N/A";
         } else {
           extracted.father_name = "N/A";
-          extracted.mobile =
-            rawText.match(/\b[6-9]\d{9}\b/)?.[0] || "Not Found";
+          extracted.mobile = rawText.match(/\b[6-9]\d{9}\b/)?.[0] || "Not Found";
         }
       }
-      // ✅ End new part
 
       setExtractedData(extracted);
       setMismatches(mismatched);
-      setStatus(mismatched.length ? "error" : "success");
-
-
-      setExtractedData(extracted);
-      setMismatches(mismatched);
-      setStatus(mismatched.length ? "error" : "success");
-    } catch (err) {
-      console.error("OCR error:", err);
+      setStatus(mismatched.length === 0 ? "success" : "error");
+    } catch (error) {
+      console.error("OCR error:", error);
       setStatus("error");
     }
   };
@@ -171,7 +192,7 @@ const VerifyPanCard = () => {
         <div className="form-row">
           <label>ID Type:</label>
           <select
-          id="id-input"
+            id="id-input"
             value={idType}
             onChange={(e) => {
               setIdType(e.target.value);
@@ -184,7 +205,11 @@ const VerifyPanCard = () => {
           <input
             type="text"
             value={idNumber}
-            placeholder={idType === "pan" ? "Enter PAN Number" : "Enter Aadhaar Number"}
+            placeholder={
+              idType === "pan"
+                ? "Enter PAN Number"
+                : "Enter Last 4 digits of Aadhaar"
+            }
             onChange={(e) => setIdNumber(e.target.value)}
           />
         </div>
@@ -202,22 +227,29 @@ const VerifyPanCard = () => {
           🔍 Verify
         </button>
 
-        {status === "loading" && (
-          <p className="status loading">🔄 Extracting text, please wait...</p>
-        )}
+       
+      {status === "loading" && (
+  <div className="status loading" role="alert" aria-live="polite" style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+    <Lottie animationData={Loading} style={{height: 40, width: 40}} loop={true} />
+    <span>Extracting text, please wait...</span>
+  </div>
+)}
 
-        {status === "success" && extractedData && (
-          <div className="status success">
-            ✅ <strong>All fields matched!</strong>
-            <div className="verified-info">
-              {Object.entries(extractedData).map(([key, val]) => (
-                <p key={key}>
-                  <strong>{key.replace("_", " ").toUpperCase()}:</strong> {val}
-                </p>
-              ))}
-            </div>
-          </div>
-        )}
+
+      {status === "success" && extractedData && (
+  <div className="status success" role="alert" aria-live="polite" >
+
+    <strong>    <Lottie animationData={Success} style={{height: 40, width: 80,position:"absolute",right:720,bottom:40}} loop={false} />All fields matched!</strong>
+    <div className="verified-info">
+      {Object.entries(extractedData).map(([key, val]) => (
+        <p key={key}>
+          <strong>{key.replace(/_/g, " ").toUpperCase()}:</strong> {val}
+        </p>
+      ))}
+    </div>
+  </div>
+)}
+
 
         {status === "error" && extractedData && (
           <div className="status error">
@@ -230,14 +262,12 @@ const VerifyPanCard = () => {
             <div className="verified-info">
               {Object.entries(extractedData).map(([key, val]) => (
                 <p key={key}>
-                  <strong>{key.replace("_", " ").toUpperCase()}:</strong> {val}
+                  <strong>{key.replace(/_/g, " ").toUpperCase()}:</strong> {val}
                 </p>
               ))}
             </div>
           </div>
         )}
-
-       
       </div>
     </div>
   );
