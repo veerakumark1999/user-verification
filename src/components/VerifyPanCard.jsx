@@ -76,12 +76,23 @@ const VerifyPanCard = () => {
     setMismatches([]);
     setErrorMessage("");
 
+    if (image.size > 5 * 1024 * 1024) {
+      setErrorMessage(
+        "Please upload an image smaller than 5MB to avoid OCR timeout.",
+      );
+      setStatus("error");
+      return;
+    }
+
     try {
       const base64Image = await toBase64(image);
 
       const formData = new FormData();
       formData.append("apikey", OCR_API_KEY);
-      formData.append("base64Image", `data:image/png;base64,${base64Image}`);
+      formData.append(
+        "base64Image",
+        `data:${image.type};base64,${base64Image}`,
+      );
       formData.append("language", "eng");
       formData.append("scale", true);
       formData.append("OCREngine", 2);
@@ -91,9 +102,6 @@ const VerifyPanCard = () => {
         formData,
         {
           timeout: 120000,
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
         },
       );
 
@@ -102,6 +110,12 @@ const VerifyPanCard = () => {
           Array.isArray(res.data.ErrorMessage)
             ? res.data.ErrorMessage[0]
             : res.data.ErrorMessage || "OCR processing failed",
+        );
+      }
+
+      if (!res.data.ParsedResults || !res.data.ParsedResults.length) {
+        throw new Error(
+          "No OCR result returned. Please retry with a clear image.",
         );
       }
 
