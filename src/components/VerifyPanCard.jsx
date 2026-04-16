@@ -15,6 +15,7 @@ const VerifyPanCard = () => {
   const [status, setStatus] = useState("idle"); // idle, loading, success, error
   const [mismatches, setMismatches] = useState([]);
   const [extractedData, setExtractedData] = useState(null);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 
@@ -73,6 +74,7 @@ const VerifyPanCard = () => {
     setStatus("loading");
     setExtractedData(null);
     setMismatches([]);
+    setErrorMessage("");
 
     try {
       const base64Image = await toBase64(image);
@@ -87,10 +89,20 @@ const VerifyPanCard = () => {
       const res = await axios.post(
         "https://api.ocr.space/parse/image",
         formData,
+        {
+          timeout: 120000,
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        },
       );
 
       if (res.data.IsErroredOnProcessing) {
-        throw new Error(res.data.ErrorMessage[0]);
+        throw new Error(
+          Array.isArray(res.data.ErrorMessage)
+            ? res.data.ErrorMessage[0]
+            : res.data.ErrorMessage || "OCR processing failed",
+        );
       }
 
       const rawText = res.data.ParsedResults[0].ParsedText;
@@ -172,6 +184,24 @@ const VerifyPanCard = () => {
       setStatus(mismatched.length === 0 ? "success" : "error");
     } catch (error) {
       console.error("OCR error:", error);
+      let message = "OCR failed. Please try again with a clear image.";
+
+      if (axios.isAxiosError(error)) {
+        if (error.code === "ECONNABORTED") {
+          message =
+            "OCR request timed out. Please try again with a smaller image or a faster connection.";
+        } else if (error.response?.data?.ErrorMessage) {
+          message = Array.isArray(error.response.data.ErrorMessage)
+            ? error.response.data.ErrorMessage[0]
+            : error.response.data.ErrorMessage;
+        } else if (error.message) {
+          message = error.message;
+        }
+      } else if (error instanceof Error && error.message) {
+        message = error.message;
+      }
+
+      setErrorMessage(message);
       setStatus("error");
     }
   };
@@ -264,6 +294,12 @@ const VerifyPanCard = () => {
                 </p>
               ))}
             </div>
+          </div>
+        )}
+
+        {status === "error" && errorMessage && (
+          <div className="status error" role="alert" aria-live="polite">
+            ❌ <strong>Error:</strong> {errorMessage}
           </div>
         )}
 
