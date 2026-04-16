@@ -20,7 +20,10 @@ const VerifyPanCard = () => {
 
   // Normalize text by removing non-alphanumeric and lowercasing
   const normalize = (text) =>
-    text.toLowerCase().replace(/[^a-z0-9]/gi, "").trim();
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9]/gi, "")
+      .trim();
 
   // Format ISO date string yyyy-mm-dd → dd/mm/yyyy
   const formatDateToDDMMYYYY = (isoDate) => {
@@ -34,8 +37,8 @@ const VerifyPanCard = () => {
 
   // Extract dates dd/mm/yyyy from OCR text with flexible separators
   const extractAllDatesFromText = (text) => {
-    const matches = text.match(/\b\d{2}[\s\/\-]\d{2}[\s\/\-]\d{4}\b/g);
-    return matches ? matches.map((d) => d.replace(/[\s\-]/g, "/")) : [];
+    const matches = text.match(/\b\d{2}[\s/-]\d{2}[\s/-]\d{4}\b/g);
+    return matches ? matches.map((d) => d.replace(/[\s-]/g, "/")) : [];
   };
 
   // Convert file to base64 string for OCR API input
@@ -55,10 +58,7 @@ const VerifyPanCard = () => {
     // Either 12 digits continuously or 3 groups of 4 digits separated by spaces
     const aadhaarCandidates = lines
       .map((line) => line.trim())
-      .filter(
-        (line) =>
-          /^(\d{12}|\d{4}\s\d{4}\s\d{4})$/.test(line)
-      )
+      .filter((line) => /^(\d{12}|\d{4}\s\d{4}\s\d{4})$/.test(line))
       .map((aadhaar) => aadhaar.replace(/\s/g, "")); // Remove spaces to get pure digits
 
     return aadhaarCandidates;
@@ -84,7 +84,10 @@ const VerifyPanCard = () => {
       formData.append("scale", true);
       formData.append("OCREngine", 2);
 
-      const res = await axios.post("https://api.ocr.space/parse/image", formData);
+      const res = await axios.post(
+        "https://api.ocr.space/parse/image",
+        formData,
+      );
 
       if (res.data.IsErroredOnProcessing) {
         throw new Error(res.data.ErrorMessage[0]);
@@ -106,7 +109,9 @@ const VerifyPanCard = () => {
 
       // DOB exact normalized matching
       const formattedDob = formatDateToDDMMYYYY(dob);
-      const dobFound = allDates.some((d) => normalize(d) === normalize(formattedDob));
+      const dobFound = allDates.some(
+        (d) => normalize(d) === normalize(formattedDob),
+      );
       if (!dobFound) mismatched.push("DOB");
       extracted.dob = dobFound ? formattedDob : "Not Found";
 
@@ -116,7 +121,8 @@ const VerifyPanCard = () => {
         const panValid = PAN_REGEX.test(idNumber.toUpperCase());
         const panFound =
           panValid &&
-          (text.includes(expectedPan) || lines.some((line) => line.includes(expectedPan)));
+          (text.includes(expectedPan) ||
+            lines.some((line) => line.includes(expectedPan)));
         if (!panFound) mismatched.push("PAN");
         extracted.pan = panFound ? idNumber.toUpperCase() : "Not Found";
       } else {
@@ -128,31 +134,36 @@ const VerifyPanCard = () => {
         // Debug logs - remove or comment out in production
         console.log("Extracted Aadhaar candidates:", aadhaarCandidates);
         console.log("User input last 4 digits:", cleanInput);
-       
+
         let aadhaarFound = false;
         if (cleanInput.length === 4) {
-          aadhaarFound = aadhaarCandidates.some((a) => a.slice(-4) === cleanInput);
+          aadhaarFound = aadhaarCandidates.some(
+            (a) => a.slice(-4) === cleanInput,
+          );
         } else {
           aadhaarFound = false;
         }
 
         if (!aadhaarFound) mismatched.push("Aadhaar");
-        let result=aadhaarCandidates.length > 0 ? aadhaarCandidates.join(", ").slice(0,12) : "Not Found";
-        extracted.aadhaar = aadhaarFound
-          ? ` ${result}`
-          : "Not Found";
+        let result =
+          aadhaarCandidates.length > 0
+            ? aadhaarCandidates.join(", ").slice(0, 12)
+            : "Not Found";
+        extracted.aadhaar = aadhaarFound ? ` ${result}` : "Not Found";
       }
 
       // Extract extra info on full match
       if (mismatched.length === 0) {
         if (idType === "pan") {
           extracted.father_name =
-            rawText.match(/(?:Father'?s Name|Fathers Name|S\/O)\s*:?(.+)/i)?.[1]?.trim() ||
-            "Not Found";
+            rawText
+              .match(/(?:Father'?s Name|Fathers Name|S\/O)\s*:?(.+)/i)?.[1]
+              ?.trim() || "Not Found";
           extracted.mobile = "N/A";
         } else {
           extracted.father_name = "N/A";
-          extracted.mobile = rawText.match(/\b[6-9]\d{9}\b/)?.[0] || "Not Found";
+          extracted.mobile =
+            rawText.match(/\b[6-9]\d{9}\b/)?.[0] || "Not Found";
         }
       }
 
@@ -227,29 +238,34 @@ const VerifyPanCard = () => {
           🔍 Verify
         </button>
 
-       
-      {status === "loading" && (
-  <div className="status loading" role="alert" aria-live="polite" style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
-    <Lottie animationData={Loading} style={{height: 40, width: 40}} loop={true} />
-    <span>Extracting text, please wait...</span>
-  </div>
-)}
+        {status === "loading" && (
+          <div
+            className="status loading"
+            role="alert"
+            aria-live="polite"
+            style={{ display: "flex", alignItems: "center", gap: "10px" }}
+          >
+            <Lottie
+              animationData={Loading}
+              style={{ height: 40, width: 40 }}
+              loop={true}
+            />
+            <span>Extracting text, please wait...</span>
+          </div>
+        )}
 
-
-      {status === "success" && extractedData && (
-  <div className="status success" role="alert" aria-live="polite" >
-
-    <strong> ☑️ All fields matched!</strong>
-    <div className="verified-info">
-      {Object.entries(extractedData).map(([key, val]) => (
-        <p key={key}>
-          <strong>{key.replace(/_/g, " ").toUpperCase()}:</strong> {val}
-        </p>
-      ))}
-    </div>
-  </div>
-)}
-
+        {status === "success" && extractedData && (
+          <div className="status success" role="alert" aria-live="polite">
+            <strong> ☑️ All fields matched!</strong>
+            <div className="verified-info">
+              {Object.entries(extractedData).map(([key, val]) => (
+                <p key={key}>
+                  <strong>{key.replace(/_/g, " ").toUpperCase()}:</strong> {val}
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
 
         {status === "error" && extractedData && (
           <div className="status error">
