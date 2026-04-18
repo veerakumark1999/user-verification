@@ -4,7 +4,8 @@ import "./VerifyPanCard.css";
 import Lottie from "lottie-react";
 
 import Loading from "../animations/Loading animation blue.json";
-const OCR_API_KEY = "K83929765888957"; // Replace with your API key
+
+const OCR_API_KEY = "K83929765888957";
 
 const VerifyPanCard = () => {
   const [name, setName] = useState("");
@@ -12,21 +13,19 @@ const VerifyPanCard = () => {
   const [idType, setIdType] = useState("pan");
   const [idNumber, setIdNumber] = useState("");
   const [image, setImage] = useState(null);
-  const [status, setStatus] = useState("idle"); // idle, loading, success, error
+  const [status, setStatus] = useState("idle");
   const [mismatches, setMismatches] = useState([]);
   const [extractedData, setExtractedData] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
 
   const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 
-  // Normalize text by removing non-alphanumeric and lowercasing
   const normalize = (text) =>
     text
       .toLowerCase()
       .replace(/[^a-z0-9]/gi, "")
       .trim();
 
-  // Format ISO date string yyyy-mm-dd → dd/mm/yyyy
   const formatDateToDDMMYYYY = (isoDate) => {
     if (!isoDate) return "";
     const d = new Date(isoDate);
@@ -36,13 +35,11 @@ const VerifyPanCard = () => {
     return `${day}/${month}/${year}`;
   };
 
-  // Extract dates dd/mm/yyyy from OCR text with flexible separators
   const extractAllDatesFromText = (text) => {
     const matches = text.match(/\b\d{2}[\s/-]\d{2}[\s/-]\d{4}\b/g);
     return matches ? matches.map((d) => d.replace(/[\s-]/g, "/")) : [];
   };
 
-  // Convert file to base64 string for OCR API input
   const toBase64 = (file) =>
     new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -51,18 +48,14 @@ const VerifyPanCard = () => {
       reader.onerror = (error) => reject(error);
     });
 
-  // Extract Aadhaar numbers only from lines matching exact pattern
-  const extractAadhaarOnlyFromLines = (rawText) => {
-    const lines = rawText.split("\n");
+  // ✅ NEW: Robust Aadhaar extraction
+  const extractAadhaarFlexible = (rawText) => {
+    const matches = rawText.match(/\b\d{4}\s?\d{4}\s?\d{4}\b/g);
+    if (!matches) return [];
 
-    // Filter lines that conform exactly to Aadhaar number format:
-    // Either 12 digits continuously or 3 groups of 4 digits separated by spaces
-    const aadhaarCandidates = lines
-      .map((line) => line.trim())
-      .filter((line) => /^(\d{12}|\d{4}\s\d{4}\s\d{4})$/.test(line))
-      .map((aadhaar) => aadhaar.replace(/\s/g, "")); // Remove spaces to get pure digits
-
-    return aadhaarCandidates;
+    return matches
+      .map((num) => num.replace(/\s/g, ""))
+      .filter((num) => /^[2-9][0-9]{11}$/.test(num));
   };
 
   const handleVerify = async () => {
@@ -77,9 +70,7 @@ const VerifyPanCard = () => {
     setErrorMessage("");
 
     if (image.size > 5 * 1024 * 1024) {
-      setErrorMessage(
-        "Please upload an image smaller than 5MB to avoid OCR timeout.",
-      );
+      setErrorMessage("Upload image below 5MB.");
       setStatus("error");
       return;
     }
@@ -100,26 +91,19 @@ const VerifyPanCard = () => {
       const res = await axios.post(
         "https://api.ocr.space/parse/image",
         formData,
-        {
-          timeout: 120000,
-        },
+        { timeout: 120000 },
       );
 
       if (res.data.IsErroredOnProcessing) {
         throw new Error(
           Array.isArray(res.data.ErrorMessage)
             ? res.data.ErrorMessage[0]
-            : res.data.ErrorMessage || "OCR processing failed",
-        );
-      }
-
-      if (!res.data.ParsedResults || !res.data.ParsedResults.length) {
-        throw new Error(
-          "No OCR result returned. Please retry with a clear image.",
+            : res.data.ErrorMessage,
         );
       }
 
       const rawText = res.data.ParsedResults[0].ParsedText;
+
       const lines = rawText.split("\n").map((line) => normalize(line));
       const text = normalize(rawText);
       const allDates = extractAllDatesFromText(rawText);
@@ -127,64 +111,64 @@ const VerifyPanCard = () => {
       const mismatched = [];
       const extracted = {};
 
-      // Strict exact normalized name matching
+      // ✅ Name check
       const expectedName = normalize(name);
       const nameFound = lines.includes(expectedName);
+
       if (!nameFound) mismatched.push("Name");
       extracted.name = nameFound ? name : "Not Found";
 
-      // DOB exact normalized matching
+      // ✅ DOB check
       const formattedDob = formatDateToDDMMYYYY(dob);
       const dobFound = allDates.some(
         (d) => normalize(d) === normalize(formattedDob),
       );
+
       if (!dobFound) mismatched.push("DOB");
       extracted.dob = dobFound ? formattedDob : "Not Found";
 
-      // PAN or Aadhaar verification
+      // ✅ PAN or Aadhaar
       if (idType === "pan") {
         const expectedPan = normalize(idNumber);
         const panValid = PAN_REGEX.test(idNumber.toUpperCase());
+
         const panFound =
           panValid &&
           (text.includes(expectedPan) ||
             lines.some((line) => line.includes(expectedPan)));
+
         if (!panFound) mismatched.push("PAN");
         extracted.pan = panFound ? idNumber.toUpperCase() : "Not Found";
       } else {
-        // Aadhaar: extract only lines that match Aadhaar pattern exactly
-        const aadhaarCandidates = extractAadhaarOnlyFromLines(rawText);
+        // 🔥 NEW Aadhaar logic
+        const aadhaarCandidates = extractAadhaarFlexible(rawText);
 
         const cleanInput = idNumber.replace(/\D/g, "");
 
-        // Debug logs - remove or comment out in production
-        console.log("Extracted Aadhaar candidates:", aadhaarCandidates);
-        console.log("User input last 4 digits:", cleanInput);
+        console.log("Aadhaar Found:", aadhaarCandidates);
 
         let aadhaarFound = false;
+
         if (cleanInput.length === 4) {
-          aadhaarFound = aadhaarCandidates.some(
-            (a) => a.slice(-4) === cleanInput,
-          );
-        } else {
-          aadhaarFound = false;
+          aadhaarFound = aadhaarCandidates.some((a) => a.endsWith(cleanInput));
+        } else if (cleanInput.length === 12) {
+          aadhaarFound = aadhaarCandidates.includes(cleanInput);
         }
 
         if (!aadhaarFound) mismatched.push("Aadhaar");
+
         let result =
-          aadhaarCandidates.length > 0
-            ? aadhaarCandidates.join(", ").slice(0, 12)
-            : "Not Found";
-        extracted.aadhaar = aadhaarFound ? ` ${result}` : "Not Found";
+          aadhaarCandidates.length > 0 ? aadhaarCandidates[0] : "Not Found";
+
+        extracted.aadhaar = aadhaarFound ? result : "Not Found";
       }
 
-      // Extract extra info on full match
+      // ✅ Extra info
       if (mismatched.length === 0) {
         if (idType === "pan") {
           extracted.father_name =
-            rawText
-              .match(/(?:Father'?s Name|Fathers Name|S\/O)\s*:?(.+)/i)?.[1]
-              ?.trim() || "Not Found";
+            rawText.match(/(?:Father'?s Name|S\/O)\s*:?(.+)/i)?.[1]?.trim() ||
+            "Not Found";
           extracted.mobile = "N/A";
         } else {
           extracted.father_name = "N/A";
@@ -197,25 +181,8 @@ const VerifyPanCard = () => {
       setMismatches(mismatched);
       setStatus(mismatched.length === 0 ? "success" : "error");
     } catch (error) {
-      console.error("OCR error:", error);
-      let message = "OCR failed. Please try again with a clear image.";
-
-      if (axios.isAxiosError(error)) {
-        if (error.code === "ECONNABORTED") {
-          message =
-            "OCR request timed out. Please try again with a smaller image or a faster connection.";
-        } else if (error.response?.data?.ErrorMessage) {
-          message = Array.isArray(error.response.data.ErrorMessage)
-            ? error.response.data.ErrorMessage[0]
-            : error.response.data.ErrorMessage;
-        } else if (error.message) {
-          message = error.message;
-        }
-      } else if (error instanceof Error && error.message) {
-        message = error.message;
-      }
-
-      setErrorMessage(message);
+      console.error(error);
+      setErrorMessage("OCR failed. Try a clearer image.");
       setStatus("error");
     }
   };
@@ -230,13 +197,12 @@ const VerifyPanCard = () => {
           <input
             type="text"
             value={name}
-            placeholder="Enter Full Name"
             onChange={(e) => setName(e.target.value)}
           />
         </div>
 
         <div className="form-row">
-          <label>Date of Birth:</label>
+          <label>DOB:</label>
           <input
             type="date"
             value={dob}
@@ -254,84 +220,78 @@ const VerifyPanCard = () => {
               setIdNumber("");
             }}
           >
-            <option value="pan">PAN Card</option>
-            <option value="aadhaar">Aadhaar Card</option>
+            <option value="pan">PAN</option>
+            <option value="aadhaar">Aadhaar</option>
           </select>
+
           <input
             type="text"
             value={idNumber}
             placeholder={
-              idType === "pan"
-                ? "Enter PAN Number"
-                : "Enter Last 4 digits of Aadhaar"
+              idType === "pan" ? "Enter PAN" : "Enter Aadhaar / Last 4 digits"
             }
             onChange={(e) => setIdNumber(e.target.value)}
           />
         </div>
 
         <div className="upload-section">
-          <label>Upload Card Image:</label>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => setImage(e.target.files[0])}
-          />
+          <input type="file" onChange={(e) => setImage(e.target.files[0])} />
         </div>
 
-        <button onClick={handleVerify} className="btn verify-btn">
-          🔍 Verify
+        <button onClick={handleVerify} className="btn">
+          Verify
         </button>
 
         {status === "loading" && (
-          <div
-            className="status loading"
-            role="alert"
-            aria-live="polite"
-            style={{ display: "flex", alignItems: "center", gap: "10px" }}
-          >
-            <Lottie
-              animationData={Loading}
-              style={{ height: 40, width: 40 }}
-              loop={true}
-            />
-            <span>Extracting text, please wait...</span>
+          <div className="status loading">
+            <Lottie animationData={Loading} style={{ height: 40 }} />
+            Processing...
           </div>
         )}
 
         {status === "success" && extractedData && (
-          <div className="status success" role="alert" aria-live="polite">
-            <strong> ☑️ All fields matched!</strong>
+          <div className="status success">
+            <strong>☑️ All fields matched!</strong>
+
             <div className="verified-info">
-              {Object.entries(extractedData).map(([key, val]) => (
-                <p key={key}>
-                  <strong>{key.replace(/_/g, " ").toUpperCase()}:</strong> {val}
-                </p>
-              ))}
+              <p>
+                <strong>NAME:</strong> {extractedData.name}
+              </p>
+
+              <p>
+                <strong>DOB:</strong> {extractedData.dob}
+              </p>
+
+              {idType === "pan" ? (
+                <>
+                  <p>
+                    <strong>PAN NUMBER:</strong> {extractedData.pan}
+                  </p>
+                  <p>
+                    <strong>FATHER NAME:</strong> {extractedData.father_name}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p>
+                    <strong>AADHAAR NUMBER:</strong> {extractedData.aadhaar}
+                  </p>
+                  <p>
+                    <strong>MOBILE:</strong> {extractedData.mobile}
+                  </p>
+                </>
+              )}
             </div>
           </div>
         )}
 
-        {status === "error" && errorMessage && (
-          <div className="status error" role="alert" aria-live="polite">
-            ❌ <strong>Error:</strong> {errorMessage}
-          </div>
-        )}
-
-        {status === "error" && extractedData && (
+        {status === "error" && (
           <div className="status error">
-            ❌ <strong>Mismatched Fields:</strong>
-            <ul>
-              {mismatches.map((item, idx) => (
-                <li key={idx}>{item}</li>
-              ))}
-            </ul>
-            <div className="verified-info">
-              {Object.entries(extractedData).map(([key, val]) => (
-                <p key={key}>
-                  <strong>{key.replace(/_/g, " ").toUpperCase()}:</strong> {val}
-                </p>
-              ))}
-            </div>
+            ❌ Error
+            <p>{errorMessage}</p>
+            {mismatches.length > 0 && (
+              <p>Mismatched: {mismatches.join(", ")}</p>
+            )}
           </div>
         )}
       </div>

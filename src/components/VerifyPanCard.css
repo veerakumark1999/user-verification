@@ -62,7 +62,7 @@ body {
   outline: none;
   transition: all 0.3s ease;
 }
-#id-input{
+#id-input {
   width: 96%;
 }
 .form-row input:focus,
@@ -79,7 +79,7 @@ body {
 }
 
 .upload-section input {
-  margin: 10px 0    ;
+  margin: 10px 0;
   width: 90%;
   padding: 10px;
   border: 2px dashed #bdc3c7;
@@ -104,7 +104,9 @@ body {
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  transition: transform 0.3s ease, background 0.3s ease;
+  transition:
+    transform 0.3s ease,
+    background 0.3s ease;
 }
 
 .btn:hover {
